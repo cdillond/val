@@ -134,7 +134,7 @@ size_t write_callback(char *buf, size_t size, size_t n_memb, void *out_file)
   return fwrite(buf, size, n_memb, (FILE *)out_file);
 }
 
-CURLUcode CSS_build_URL(CURLU *url, const char *restrict format, const char *restrict query)
+CURLUcode CSS_build_URL(CURLU *url, const char *restrict text, const char *restrict format)
 {
 
   CURLUcode rc = curl_url_set(url, CURLUPART_URL, CSS_URL, 0);
@@ -144,7 +144,7 @@ CURLUcode CSS_build_URL(CURLU *url, const char *restrict format, const char *res
     return rc;
   }
 
-  rc = curl_url_set(url, CURLUPART_QUERY, query, CURLU_APPENDQUERY | CURLU_URLENCODE);
+  rc = curl_url_set(url, CURLUPART_QUERY, text, CURLU_APPENDQUERY | CURLU_URLENCODE);
   if (rc != 0)
   {
     fprintf(stderr, "CURL URL error: code %d\n", rc);
@@ -235,7 +235,7 @@ int validate_css(CURL *curl, FILE *in, FILE *out, enum CSS_OUTPUT_FORMAT format)
   /* allocate query buffer */
   size_t param_len = sizeof CSS_QUERY_PARAM - 1; /* do not include null terminator here */
   size_t buf_len = param_len + data_len;
-  char *buf = malloc(buf_len); /* include space for a null terminator */
+  char *buf = malloc(buf_len + 1); /* include space for a null terminator */
 
   /* write query to buf */
   memcpy(buf, CSS_QUERY_PARAM, param_len);
@@ -250,7 +250,7 @@ int validate_css(CURL *curl, FILE *in, FILE *out, enum CSS_OUTPUT_FORMAT format)
 
   /* construct URL with query string*/
   CURLU *url = curl_url();
-  CURLUcode rc = CSS_build_URL(url, format_str, buf);
+  CURLUcode rc = CSS_build_URL(url, buf, format_str);
   if (rc)
     goto cleanup_url;
 
