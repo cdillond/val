@@ -8,6 +8,9 @@
 #define HTML_XML_URL "https://validator.w3.org/nu/?out=xml"
 #define HTML_CONTENT_TYPE "Content-Type: text/html; charset=utf-8"
 
+#define CSS_URL "TODO"
+#define CSS_CONTENT_TYPE "Content-Type: text/css; charset=utf-8"
+
 /* User agent taken from https://github.com/validator/validator/wiki/Service-%C2%BB-Input-%C2%BB-POST-body*/
 #define USER_AGENT "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.101 Safari/537.36"
 
@@ -26,9 +29,10 @@ int main(int argc, char *argv[])
   FILE *in = stdin;
   FILE *out = stdout;
   const char *url = HTML_JSON_URL;
+  const char *content_type = HTML_CONTENT_TYPE;
   extern char *optarg;
   int opt;
-  while ((opt = getopt(argc, argv, "i:o:x")) != -1)
+  while ((opt = getopt(argc, argv, "i:o:xc")) != -1)
   {
     switch (opt)
     {
@@ -40,6 +44,10 @@ int main(int argc, char *argv[])
       break;
     case 'x':
       url = HTML_XML_URL;
+      break;
+    case 'c':
+      url = CSS_URL;
+      content_type = CSS_CONTENT_TYPE;
       break;
     default:
       fprintf(stderr, "Usage: %s [-i in_path] [-o out_path] [-x xml output]\n", argv[0]);
@@ -56,7 +64,7 @@ int main(int argc, char *argv[])
   }
 
   struct curl_slist *list = NULL;
-  list = curl_slist_append(list, HTML_CONTENT_TYPE);
+  list = curl_slist_append(list, content_type);
   list = curl_slist_append(list, USER_AGENT);
 
   curl_easy_setopt(curl, CURLOPT_URL, url);
