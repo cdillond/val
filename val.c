@@ -1,9 +1,9 @@
 #include <assert.h>
-#include <stdio.h>
 #include <stdint.h>
-#include <unistd.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include <curl/curl.h>
 
@@ -18,16 +18,6 @@
 /* User agent taken from https://github.com/validator/validator/wiki/Service-%C2%BB-Input-%C2%BB-POST-body*/
 #define USER_AGENT "User-Agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2272.101 Safari/537.36"
 
-size_t read_callback(char *buf, size_t size, size_t n_memb, void *in_file)
-{
-  return fread(buf, size, n_memb, (FILE *)in_file);
-}
-
-size_t write_callback(char *buf, size_t size, size_t n_memb, void *out_file)
-{
-  return fwrite(buf, size, n_memb, (FILE *)out_file);
-}
-
 enum CSS_OUTPUT_FORMAT
 {
   TEXT_HTML,
@@ -40,7 +30,7 @@ enum CSS_OUTPUT_FORMAT
   TEXT,
 };
 
-static const char *outputs[] = {
+static const char *formats[] = {
     "output=text/html",
     "output=html",
     "output=application/xhtml+xml",
@@ -51,51 +41,21 @@ static const char *outputs[] = {
     "output=text",
 };
 
-int validate_css(CURL *curl, FILE *in, FILE *out, enum CSS_OUTPUT_FORMAT format)
-{
+size_t read_callback(char *buf, size_t size, size_t n_memb, void *in_file);
 
-  int end = fseek(in, 0, SEEK_END);
-  assert(end == 0);
-  end = ftell(in);
-  rewind(in);
+size_t write_callback(char *buf, size_t size, size_t n_memb, void *out_file);
 
-  char *data = malloc(sizeof CSS_QUERY - 1 + end + 1);
-  memcpy(data, CSS_QUERY, sizeof CSS_QUERY);
-  size_t n = fread(data + sizeof CSS_QUERY - 1, sizeof *data, end, in);
-  assert(n == (size_t)end);
-
-  data[sizeof CSS_QUERY - 1 + end] = '\0';
-
-  CURLU *url = curl_url();
-  assert(url != NULL);
-  CURLUcode rc = curl_url_set(url, CURLUPART_URL, CSS_URL, 0);
-  assert(rc == 0);
-  rc = curl_url_set(url, CURLUPART_QUERY, data, CURLU_APPENDQUERY | CURLU_URLENCODE);
-  assert(rc == 0);
-  rc = curl_url_set(url, CURLUPART_QUERY, outputs[format], CURLU_APPENDQUERY | CURLU_URLENCODE);
-  assert(rc == 0);
-
-  curl_easy_setopt(curl, CURLOPT_CURLU, url);
-  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-  curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
-
-  CURLcode status = curl_easy_perform(curl);
-  if (status)
-    fprintf(stderr, "CURL error: response code %d\n", status);
-
-  curl_url_cleanup(url);
-  free(data);
-  return status;
-}
+int validate_css(CURL *curl, FILE *in, FILE *out, enum CSS_OUTPUT_FORMAT format);
 
 int main(int argc, char *argv[])
 {
+  int status = 1;
   FILE *in = stdin;
   FILE *out = stdout;
   const char *url = HTML_JSON_URL;
   const char *content_type = HTML_CONTENT_TYPE;
   int use_css = 0;
-  int css_format = TEXT_PLAIN;
+  unsigned int css_format = TEXT_PLAIN;
   extern char *optarg;
   int opt;
   while ((opt = getopt(argc, argv, "i:o:f:xc")) != -1)
@@ -110,6 +70,11 @@ int main(int argc, char *argv[])
       break;
     case 'f':
       css_format = atoi(optarg);
+      if (css_format >= (sizeof formats / sizeof *formats))
+      {
+        fprintf(stderr, "invalid CSS response format argument %d\n", css_format);
+        return status;
+      }
       break;
     case 'x':
       url = HTML_XML_URL;
@@ -118,7 +83,7 @@ int main(int argc, char *argv[])
       use_css = 1;
       break;
     default:
-      fprintf(stderr, "Usage: %s [-i in_path] [-o out_path] [-x xml output]\n", argv[0]);
+      fprintf(stderr, "Usage: %s [-i in_path] [-o out_path] [-x xml HTML response output] [-c use CSS mode] [-f CSS response format]\n", argv[0]);
       return 1;
     }
   }
@@ -127,14 +92,15 @@ int main(int argc, char *argv[])
   if (!curl)
   {
     fputs("error: unable to initialize CURL context\n", stderr);
-    return 1;
+    return status;
   }
 
   if (use_css)
   {
-    int status = validate_css(curl, stdin, stdout, css_format);
-
+    status = validate_css(curl, stdin, stdout, css_format);
     curl_easy_cleanup(curl);
+    fclose(in);
+    fclose(out);
     return status;
   }
 
@@ -150,7 +116,7 @@ int main(int argc, char *argv[])
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)out);
 
-  CURLcode status = curl_easy_perform(curl);
+  status = curl_easy_perform(curl);
   if (status)
     fprintf(stderr, "CURL error: response code %d\n", status);
 
@@ -160,5 +126,83 @@ int main(int argc, char *argv[])
   fclose(in);
   fclose(out);
 
-  return (int)status;
+  return status;
+}
+
+size_t read_callback(char *buf, size_t size, size_t n_memb, void *in_file)
+{
+  return fread(buf, size, n_memb, (FILE *)in_file);
+}
+
+size_t write_callback(char *buf, size_t size, size_t n_memb, void *out_file)
+{
+  return fwrite(buf, size, n_memb, (FILE *)out_file);
+}
+
+int validate_css(CURL *curl, FILE *in, FILE *out, enum CSS_OUTPUT_FORMAT format)
+{
+  int status = 0;
+
+  if (fseek(in, 0, SEEK_END) == -1)
+  {
+    fputs("error: unable to seek input file\n", stderr);
+    perror(NULL);
+    return 1;
+  }
+
+  long int end = ftell(in);
+  if (end == -1)
+  {
+    fputs("error: unable to determine input file size\n", stderr);
+    perror(NULL);
+    return 1;
+  }
+
+  rewind(in);
+
+  char *data = malloc(sizeof CSS_QUERY - 1 + end + 1);
+  memcpy(data, CSS_QUERY, sizeof CSS_QUERY);
+  size_t n = fread(data + sizeof CSS_QUERY - 1, sizeof *data, end, in);
+  if (n != (size_t)end)
+  {
+    fputs("error reading input file\n", stderr);
+    perror(NULL);
+    goto free_data;
+  }
+
+  data[sizeof CSS_QUERY - 1 + end] = '\0';
+
+  CURLU *url = curl_url();
+  assert(url != NULL);
+
+  CURLUcode rc = curl_url_set(url, CURLUPART_URL, CSS_URL, 0);
+  assert(rc == 0);
+
+  rc = curl_url_set(url, CURLUPART_QUERY, data, CURLU_APPENDQUERY | CURLU_URLENCODE);
+  if (rc != 0)
+  {
+    fprintf(stderr, "CURL URL error: code %d\n", rc);
+    goto cleanup_url;
+  }
+
+  rc = curl_url_set(url, CURLUPART_QUERY, formats[format], CURLU_APPENDQUERY | CURLU_URLENCODE);
+  if (rc != 0)
+  {
+    fprintf(stderr, "CURL URL error: code %d\n", rc);
+    goto cleanup_url;
+  }
+
+  curl_easy_setopt(curl, CURLOPT_CURLU, url);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, out);
+
+  status = curl_easy_perform(curl);
+  if (status)
+    fprintf(stderr, "CURL error: response code %d\n", status);
+
+cleanup_url:
+  curl_url_cleanup(url);
+free_data:
+  free(data);
+  return status;
 }
