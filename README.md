@@ -38,5 +38,5 @@ $ val -i example.html -x -o out.xml
 ```
 Validate a CSS file named example.css and output the response in a soap12 format.
 ```bash
-$ val -c -f 6 < example.css
+$ val -c -f 7 < example.css
 ```
