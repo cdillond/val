@@ -10,7 +10,7 @@
 #define HTML_JSON_URL "https://validator.w3.org/nu/?out=json"
 #define HTML_XML_URL "https://validator.w3.org/nu/?out=xml"
 #define HTML_CONTENT_TYPE "Content-Type: text/html; charset=utf-8"
-#define USER_AGENT "html validator client"
+#define USER_AGENT "User-Agent: html validator client"
 
 /* needed for CSS validation requests */
 #define CSS_URL "https://jigsaw.w3.org/css-validator/validator?"
