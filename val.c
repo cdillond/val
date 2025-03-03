@@ -31,6 +31,7 @@ enum CSS_OUTPUT_FORMAT
 size_t read_callback(char *buf, size_t size, size_t n_memb, void *in_file);
 size_t write_callback(char *buf, size_t size, size_t n_memb, void *out_file);
 int validate_css(CURL *curl, FILE *in, FILE *out, enum CSS_OUTPUT_FORMAT format);
+int validate_html(CURL *curl, FILE *in, FILE *out, const char *url, const char *content_type);
 
 int main(int argc, char *argv[])
 {
@@ -94,23 +95,7 @@ int main(int argc, char *argv[])
   if (use_css)
     status = validate_css(curl, in, out, css_format);
   else
-  {
-    /* HTML validation; much simpler than what's required for CSS */
-    struct curl_slist *list = NULL;
-    list = curl_slist_append(list, content_type);
-    list = curl_slist_append(list, USER_AGENT);
-
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_POST, 1);
-    curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
-    curl_easy_setopt(curl, CURLOPT_READDATA, (void *)in);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)out);
-
-    status = curl_easy_perform(curl);
-    curl_slist_free_all(list);
-  }
+    status = validate_html(curl, in, out, url, content_type);
 
   if (status)
     fprintf(stderr, "CURL error: response code %d\n", status);
@@ -156,6 +141,27 @@ CURLUcode CSS_build_URL(CURLU *url, const char *restrict text, const char *restr
     fprintf(stderr, "CURL URL error: code %d\n", rc);
 
   return rc;
+}
+
+/* HTML validation; much simpler than what's required for CSS */
+int validate_html(CURL *curl, FILE *in, FILE *out, const char *url, const char *content_type)
+{
+  int status;
+  struct curl_slist *list = NULL;
+  list = curl_slist_append(list, content_type);
+  list = curl_slist_append(list, USER_AGENT);
+
+  curl_easy_setopt(curl, CURLOPT_URL, url);
+  curl_easy_setopt(curl, CURLOPT_POST, 1);
+  curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback);
+  curl_easy_setopt(curl, CURLOPT_READDATA, (void *)in);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, list);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)out);
+
+  status = curl_easy_perform(curl);
+  curl_slist_free_all(list);
+  return status;
 }
 
 int CSS_http_get(CURL *curl, CURLU *url, FILE *out)
